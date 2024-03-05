@@ -4,14 +4,11 @@ import sys
 import argparse
 import time
 import openpyxl
+from openpyxl.styles import Color, PatternFill, Font, Border
 from farmer_db import easyfarmer
 
-SNR_TYPE_ESP  = 1
-SNR_TYPE_LORA = 2
-SNR_TYPE_WM   = 3
-
 DEVEL = True
-gid_list = ['2037314b-50525007-440020']
+gid = '2037314b-50525007-440020'
 
 def validate_date(date_str):
     try:
@@ -39,7 +36,16 @@ def logger_init():
     logger.addHandler(file_handler)
 
 
-def check_sensor(g, snr_type, sheet):
+def ng_value_fn(x):
+    return None if x == -9999 else x
+
+
+def check_sensor(g, snr_type, target_date, sheet, c):
+    start_dt = datetime.datetime.combine(target_date, datetime.datetime.min.time())
+    end_dt = datetime.datetime.combine(target_date, datetime.datetime.max.time())
+
+    print(f"[{snr_type}] Checking data from {start_dt} to {end_dt}")
+
     i = 2
     dns = ez.get_dns(g, snr_type)
     for dn in dns:
@@ -50,34 +56,73 @@ def check_sensor(g, snr_type, sheet):
             ds_dezip = list(zip(*ds))
             ds_values = list(ds_dezip[0])
 
+            voltage = 0
+            if dn.dcid == 'dc0041':
+                filter_values = filter(ng_value_fn, ds_values)
+                valid_values = [v for v in filter_values]
+                if len(valid_values) > 0:
+                    voltage = valid_values[-1]
+
             values_count = len(ds_values)
             failed_count = ds_values.count(-9999)
 
             if values_count - failed_count == 0:
-                sheet.cell(row=i, column=2).value = '異常'
+                sheet.cell(row=i, column=c).value = 'X'
+                sheet.cell(row=i, column=c).fill = redFill
             elif failed_count > 0:
-                sheet.cell(row=i, column=2).value = f'{failed_count}筆遺漏'
+                sheet.cell(row=i, column=c).value = f'{failed_count} lost' if dn.dcid != 'dc0041' else f'{failed_count} lost, {voltage}V'
+            else:
+                sheet.cell(row=i, column=c).value = f'OK' if dn.dcid != 'dc0041' else f'OK, {voltage}V'
         i = i + 1
+
+
+def main_task(g, target_date, c):
+    sheet0.cell(row=1, column=c).value = f'{target_date.month}/{target_date.day}'
+    sheet1.cell(row=1, column=c).value = f'{target_date.month}/{target_date.day}'
+    sheet2.cell(row=1, column=c).value = f'{target_date.month}/{target_date.day}'
+
+    check_sensor(g, easyfarmer.EasyFarmer.SNR_TYPE_ESP, target_date, sheet0, c)
+    check_sensor(g, easyfarmer.EasyFarmer.SNR_TYPE_LORA, target_date, sheet1, c)
+    check_sensor(g, easyfarmer.EasyFarmer.SNR_TYPE_WM, target_date, sheet2, c)
+
 
 
 if __name__ == '__main__':
     ez = easyfarmer.EasyFarmer()
+    g = ez.get_gw(gid)
+
+    today = datetime.date.today()
+    yesterday = today - datetime.timedelta(days=1)
+    delta = None
 
     parser = argparse.ArgumentParser(description="gscan daemon")
     parser.add_argument("-o", "--output", help="Output log file")
     parser.add_argument("-d", "--date", help="Date", type=validate_date)
+    parser.add_argument("-s", "--start", help="Start datetime", type=validate_date)
+    parser.add_argument("-e", "--end", help="End datetime", type=validate_date)
     args = parser.parse_args()
 
-    today = datetime.date.today()
-    yesterday = today - datetime.timedelta(days=1)
-    target_date = args.date if args.date else yesterday
-    start_dt = datetime.datetime.combine(target_date, datetime.datetime.min.time())
-    end_dt = datetime.datetime.combine(target_date, datetime.datetime.max.time())
+    if args.start and args.end is None:
+         sys.exit("End date miss. Terminate gscand daemon.")
+    elif args.end and args.start is None:
+         sys.exit("Start date miss. Terminate gscand daemon.")
+    elif args.start and args.end and args.date:
+         sys.exit("Select date range or specified date. Terminate gscand daemon.")
+
+    if args.start and args.end:
+        start_dt = datetime.datetime.combine(args.start, datetime.datetime.min.time())
+        end_dt = datetime.datetime.combine(args.end, datetime.datetime.max.time())
+        delta = end_dt - start_dt
+    elif args.date:
+        start_dt = datetime.datetime.combine(args.date, datetime.datetime.min.time())
+        end_dt = datetime.datetime.combine(args.date, datetime.datetime.max.time())
+    else:
+        start_dt = datetime.datetime.combine(yesterday, datetime.datetime.min.time())
+        end_dt = datetime.datetime.combine(yesterday, datetime.datetime.max.time())
 
     logger_init()
     logging.info("-" * 50)
     logging.info("<<< gscan daemon >>>")
-    logging.info(f"Target Date: {target_date}")
     logging.info(f"{start_dt} - {end_dt}")
     logging.info("-" * 50)
 
@@ -87,23 +132,29 @@ if __name__ == '__main__':
 
     workbook = openpyxl.Workbook()
 
+
+    redFill = PatternFill(start_color='FFFF0000',
+                   end_color='FFFF0000',
+                   fill_type='solid')
+
     sheet0 = workbook.create_sheet('氣象站', 0)
     sheet0.cell(row=1, column=1).value = '感測器'
-    sheet0.cell(row=1, column=2).value = f'{target_date.month}-{target_date.day}'
 
     sheet1 = workbook.create_sheet('水位計', 1)
     sheet1.cell(row=1, column=1).value = '感測器'
-    sheet1.cell(row=1, column=2).value = f'{target_date.month}-{target_date.day}'
 
     sheet2 = workbook.create_sheet('水錶', 2)
     sheet2.cell(row=1, column=1).value = '感測器'
-    sheet2.cell(row=1, column=2).value = f'{target_date.month}-{target_date.day}'
 
-    for gid in gid_list:
-        g = ez.get_gw(gid)
-        check_sensor(g, ez.SNR_TYPE_ESP, sheet0)
-        check_sensor(g, ez.SNR_TYPE_LORA, sheet1)
-        check_sensor(g, ez.SNR_TYPE_WM, sheet2)
+    c = 2
+
+    if delta is not None:
+        for i in range(delta.days + 1):
+            target_date = start_dt.date() + datetime.timedelta(days=i)
+            main_task(g, target_date, c)
+            c = c + 1
+    else:
+        main_task(g, start_dt.date(), c)
 
     workbook.save("test.xlsx")
 
