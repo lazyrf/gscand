@@ -106,7 +106,8 @@ def main_task(g, target_date, c):
     sheet2.cell(row=1, column=c).value = f'{target_date.month}/{target_date.day}'
 
     check_sensor(g, easyfarmer.EasyFarmer.SNR_TYPE_ESP, target_date, sheet0, c)
-    check_sensor(g, easyfarmer.EasyFarmer.SNR_TYPE_LORA, target_date, sheet1, c)
+    if mode != 1:
+        check_sensor(g, easyfarmer.EasyFarmer.SNR_TYPE_LORA, target_date, sheet1, c)
     check_sensor(g, easyfarmer.EasyFarmer.SNR_TYPE_WM, target_date, sheet2, c)
 
 
@@ -124,6 +125,7 @@ if __name__ == '__main__':
     parser.add_argument("-d", "--date", help="Date", type=validate_date)
     parser.add_argument("-s", "--start", help="Start datetime", type=validate_date)
     parser.add_argument("-e", "--end", help="End datetime", type=validate_date)
+    parser.add_argument("-m", "--mode", help="Mode")
     args = parser.parse_args()
 
     if args.start and args.end is None:
@@ -144,9 +146,12 @@ if __name__ == '__main__':
         start_dt = datetime.datetime.combine(yesterday, datetime.datetime.min.time())
         end_dt = datetime.datetime.combine(yesterday, datetime.datetime.max.time())
 
+    mode = int(args.mode) if args.mode else 0
+
     logger_init()
     logging.info("-" * 50)
     logging.info("<<< gscan daemon >>>")
+    logging.info(f"Mode: {mode}")
     logging.info(f"{start_dt} - {end_dt}")
     logging.info("-" * 50)
 
