@@ -58,11 +58,17 @@ def check_sensor(g, snr_type, target_date, sheet, c):
             ds_values = list(ds_dezip[0])
 
             voltage = 0
+            wm_diff = 0
+
+            filter_values = filter(ng_value_fn, ds_values)
+            valid_values = [v for v in filter_values]
+
             if dn.dcid == 'dc0041':
-                filter_values = filter(ng_value_fn, ds_values)
-                valid_values = [v for v in filter_values]
                 if len(valid_values) > 0:
                     voltage = valid_values[-1]
+            elif dn.dcid == 'dc0051':
+                if len(valid_values) >= 2:
+                    wm_diff = float(valid_values[-1]) - float(valid_values[0])
 
             values_count = len(ds_values)
             failed_count = ds_values.count(-9999)
@@ -74,7 +80,10 @@ def check_sensor(g, snr_type, target_date, sheet, c):
                 sheet.cell(row=i, column=c).value = f'{failed_count} lost' if dn.dcid != 'dc0041' else f'{failed_count} lost, {voltage}V'
                 sheet.cell(row=i, column=c).fill = greenFill
             else:
-                sheet.cell(row=i, column=c).value = f'OK' if dn.dcid != 'dc0041' else f'OK, {voltage}V'
+                if dn.dcid == 'dc0051':
+                    sheet.cell(row=i, column=c).value = 0 if wm_diff == 0.0 else f'{round(wm_diff,2)}'
+                else:
+                    sheet.cell(row=i, column=c).value = f'OK' if dn.dcid != 'dc0041' else f'{voltage}'
         i = i + 1
 
 
