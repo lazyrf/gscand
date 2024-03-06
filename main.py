@@ -6,6 +6,7 @@ import time
 import openpyxl
 from openpyxl.styles import Color, PatternFill, Font, Border
 from openpyxl.utils import get_column_letter
+from itertools import groupby
 from farmer_db import easyfarmer
 
 DEVEL = True
@@ -73,11 +74,19 @@ def check_sensor(g, snr_type, target_date, sheet, c):
             values_count = len(ds_values)
             failed_count = ds_values.count(-9999)
 
+            is_abnormal = False
+            clean_values = [0 if v != -9999 else v for v in ds_values]
+            group_values = [(i, len(list(j))) for i, j in groupby(clean_values)]
+            for el_value, el_count in group_values:
+                if el_value == -9999.0 and el_count > 24:
+                    is_abnormal = True
+                    break
+
             if values_count - failed_count == 0:
                 sheet.cell(row=i, column=c).value = 'X'
                 sheet.cell(row=i, column=c).fill = redFill
-            elif failed_count > 24:
-                sheet.cell(row=i, column=c).value = f'{failed_count} lost' if dn.dcid != 'dc0041' else f'{failed_count} lost, {voltage}V'
+            elif failed_count > 0 and is_abnormal:
+                sheet.cell(row=i, column=c).value = '?' if dn.dcid != 'dc0041' else f'{voltage}'
                 sheet.cell(row=i, column=c).fill = greenFill
             else:
                 if dn.dcid == 'dc0051':
