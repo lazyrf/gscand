@@ -5,6 +5,7 @@ import argparse
 import time
 import openpyxl
 from openpyxl.styles import Color, PatternFill, Font, Border
+from openpyxl.utils import get_column_letter
 from farmer_db import easyfarmer
 
 DEVEL = True
@@ -69,14 +70,19 @@ def check_sensor(g, snr_type, target_date, sheet, c):
             if values_count - failed_count == 0:
                 sheet.cell(row=i, column=c).value = 'X'
                 sheet.cell(row=i, column=c).fill = redFill
-            elif failed_count > 0:
+            elif failed_count > 24:
                 sheet.cell(row=i, column=c).value = f'{failed_count} lost' if dn.dcid != 'dc0041' else f'{failed_count} lost, {voltage}V'
+                sheet.cell(row=i, column=c).fill = greenFill
             else:
                 sheet.cell(row=i, column=c).value = f'OK' if dn.dcid != 'dc0041' else f'OK, {voltage}V'
         i = i + 1
 
 
 def main_task(g, target_date, c):
+    sheet0.column_dimensions[get_column_letter(c)].width = 10
+    sheet1.column_dimensions[get_column_letter(c)].width = 10
+    sheet2.column_dimensions[get_column_letter(c)].width = 10
+
     sheet0.cell(row=1, column=c).value = f'{target_date.month}/{target_date.day}'
     sheet1.cell(row=1, column=c).value = f'{target_date.month}/{target_date.day}'
     sheet2.cell(row=1, column=c).value = f'{target_date.month}/{target_date.day}'
@@ -133,18 +139,24 @@ if __name__ == '__main__':
     workbook = openpyxl.Workbook()
 
 
-    redFill = PatternFill(start_color='FFFF0000',
-                   end_color='FFFF0000',
+    redFill = PatternFill(start_color='FFFF6B6B',
+                   end_color='FFFF6B6B',
+                   fill_type='solid')
+    greenFill = PatternFill(start_color='FF63e6be',
+                   end_color='FF63e6be',
                    fill_type='solid')
 
     sheet0 = workbook.create_sheet('氣象站', 0)
     sheet0.cell(row=1, column=1).value = '感測器'
+    sheet0.column_dimensions['A'].width = 20
 
     sheet1 = workbook.create_sheet('水位計', 1)
     sheet1.cell(row=1, column=1).value = '感測器'
+    sheet1.column_dimensions['A'].width = 20
 
     sheet2 = workbook.create_sheet('水錶', 2)
     sheet2.cell(row=1, column=1).value = '感測器'
+    sheet2.column_dimensions['A'].width = 20
 
     c = 2
 
